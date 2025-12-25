@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎅 Santa Tracker Live</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+    --red:#c0392b;
+    --gold:#f1c40f;
+    --green:#27ae60;
+}
+
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    background:#0f2c45;
+    font-family:'Segoe UI',sans-serif;
+    color:#fff;
+    overflow:hidden;
+}
+
+/* ================= HEADER ================= */
+header{
+    background:var(--red);
+    padding:10px 16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-bottom:4px solid var(--gold);
+    z-index:10;
+    position:relative;
+}
+
+header h1{
+    margin:0;
+    font-family:'Mountains of Christmas',cursive;
+    font-size:clamp(1.4rem,3vw,2rem);
+}
+
+header p{
+    margin:0;
+    font-size:.75rem;
+    opacity:.9;
+}
+
+#musicBtn{
+    background:var(--green);
+    color:#fff;
+    border:2px solid #fff;
+    padding:6px 14px;
+    border-radius:20px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+/* ================= MAP ================= */
+#map{
+    width:100%;
+    height:calc(100vh - 72px);
+}
+
+/* ================= SANTA ================= */
+.santa-icon-div{
+    background:transparent;
+    text-align:center;
+}
+
+.santa-emoji{
+    font-size:36px;
+    text-shadow:2px 2px 6px rgba(0,0,0,.6);
+    transition:transform .2s linear;
+}
+
+/* ================= SALJU JATUH ================= */
+.snow-layer{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:999;
+}
+
+.snowflake{
+    position:absolute;
+    top:-10px;
+    color:white;
+    user-select:none;
+    animation:fall linear forwards;
+}
+
+@keyframes fall{
+    to{
+        transform:translateY(110vh);
+    }
+}
+
+/* ================= SALJU NEMPEL LAYAR ================= */
+.screen-snow{
+    position:fixed;
+    width:12px;
+    height:12px;
+    background:white;
+    border-radius:50%;
+    opacity:.9;
+    pointer-events:none;
+    z-index:1000;
+    animation:stick 6s ease-out forwards;
+}
+
+@keyframes stick{
+    0%{transform:scale(0)}
+    70%{transform:scale(1)}
+    100%{
+        transform:scale(1.3);
+        opacity:0;
+    }
+}
+
+/* ================= RESPONSIVE ================= */
+@media(max-width:600px){
+    header{
+        flex-direction:column;
+        gap:6px;
+        text-align:center;
+    }
+    #map{
+        height:calc(100vh - 96px);
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <div>
+        <h1>🎅 Santa Tracker Live</h1>
+        <p>Klik Santa untuk dengar dia tertawa</p>
+    </div>
+    <button id="musicBtn" onclick="toggleMute()">🔊 Music ON</button>
+</header>
+
+<div id="map"></div>
+
+<!-- LAYER SALJU -->
+<div class="snow-layer" id="snowLayer"></div>
+
+<audio id="bgMusic" loop>
+    <source src="music/bg.mp3" type="audio/mpeg">
+</audio>
+
+<audio id="santaLaugh">
+    <source src="music/ho-ho-ho-merry-christmas.mp3" type="audio/mpeg">
+</audio>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+/* ================= AUDIO ================= */
+const bgAudio=document.getElementById('bgMusic');
+const laughAudio=document.getElementById('santaLaugh');
+const btn=document.getElementById('musicBtn');
+
+window.addEventListener('load',()=>{
+    bgAudio.volume=.5;
+    bgAudio.play().catch(()=>{
+        document.body.addEventListener('click',()=>bgAudio.play(),{once:true});
+    });
+});
+
+function toggleMute(){
+    if(bgAudio.paused){
+        bgAudio.play();
+        btn.textContent="🔊 Music ON";
+        btn.style.background="#27ae60";
+    }else{
+        bgAudio.pause();
+        btn.textContent="🔇 Music OFF";
+        btn.style.background="#c0392b";
+    }
+}
+
+function playSantaLaugh(){
+    laughAudio.currentTime=0;
+    laughAudio.play();
+}
+
+/* ================= MAP ================= */
+const map=L.map('map',{zoomControl:false}).setView([20,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap',
+    noWrap:true
+}).addTo(map);
+
+const greetings=[
+    "Ho Ho Ho! 🎄",
+    "Hadiah sedang dikirim 🎁",
+    "Selamat liburan ❄️",
+    "Damai di bumi ✨"
+];
+
+/* ================= SANTA ================= */
+class Santa{
+    constructor(){
+        this.lat=Math.random()*120-60;
+        this.lng=Math.random()*360-180;
+        this.speed=.02+Math.random()*.04;
+
+        const icon=L.divIcon({
+            className:'santa-icon-div',
+            html:'<span class="santa-emoji">🎅🛷</span>',
+            iconSize:[50,50],
+            iconAnchor:[25,25]
+        });
+
+        this.marker=L.marker([this.lat,this.lng],{icon}).addTo(map);
+        this.pickTarget();
+        this.animate();
+
+        this.marker.on('click',()=>{
+            playSantaLaugh();
+            this.marker.bindPopup(
+                greetings[Math.floor(Math.random()*greetings.length)]
+            ).openPopup();
+        });
+    }
+
+    pickTarget(){
+        this.tLat=Math.random()*100-50;
+        this.tLng=Math.random()*360-180;
+    }
+
+    animate(){
+        const dLat=this.tLat-this.lat;
+        const dLng=this.tLng-this.lng;
+        const dist=Math.hypot(dLat,dLng);
+
+        if(dist<1) this.pickTarget();
+        else{
+            this.lat+=dLat/dist*this.speed;
+            this.lng+=dLng/dist*this.speed;
+            this.marker.setLatLng([this.lat,this.lng]);
+
+            const el=this.marker.getElement();
+            if(el){
+                el.querySelector('.santa-emoji')
+                  .style.transform=dLng<0?'scaleX(-1)':'scaleX(1)';
+            }
+        }
+        requestAnimationFrame(()=>this.animate());
+    }
+}
+
+for(let i=0;i<10;i++){
+    setTimeout(()=>new Santa(),i*700);
+}
+
+/* ================= SISTEM SALJU ================= */
+const snowLayer=document.getElementById('snowLayer');
+
+let intensity=5;
+let direction="up"; // up = nambah, down = mencair
+
+function spawnSnow(){
+    for(let i=0;i<intensity;i++){
+        const snow=document.createElement('div');
+        snow.className='snowflake';
+        snow.textContent='❄';
+        snow.style.left=Math.random()*100+'vw';
+        snow.style.fontSize=(8+Math.random()*14)+'px';
+        snow.style.opacity=Math.random();
+        snow.style.animationDuration=(5+Math.random()*5)+'s';
+        snowLayer.appendChild(snow);
+
+        setTimeout(()=>snow.remove(),10000);
+    }
+
+    // efek salju nempel layar saat lebat
+    if(intensity>40){
+        const stick=document.createElement('div');
+        stick.className='screen-snow';
+        stick.style.left=Math.random()*100+'vw';
+        stick.style.top=Math.random()*100+'vh';
+        document.body.appendChild(stick);
+        setTimeout(()=>stick.remove(),6000);
+    }
+}
+
+/* Loop siklus: lebat -> mencair */
+setInterval(()=>{
+    if(direction==="up"){
+        intensity+=4;
+        if(intensity>=60) direction="down";
+    }else{
+        intensity-=3;
+        if(intensity<=5) direction="up";
+    }
+    spawnSnow();
+},2000);
+</script>
+
+</body>
+</html>
